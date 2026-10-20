@@ -1,0 +1,431 @@
+#pragma region VEXcode Generated Robot Configuration
+// Make sure all required headers are included.
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <math.h>
+#include <string.h>
+
+
+#include "vex.h"
+
+using namespace vex;
+
+// Brain should be defined by default
+brain Brain;
+
+
+// START IQ MACROS
+#define waitUntil(condition)                                                   \
+  do {                                                                         \
+    wait(5, msec);                                                             \
+  } while (!(condition))
+
+#define repeat(iterations)                                                     \
+  for (int iterator = 0; iterator < iterations; iterator++)
+// END IQ MACROS
+
+
+// Robot configuration code.
+inertial BrainInertial = inertial();
+motor leftMotor = motor(PORT1, true);
+motor rightMotor = motor(PORT6, false);
+bumper Bumper12 = bumper(PORT12);
+distance Distance7 = distance(PORT7);
+touchled TouchLED9 = touchled(PORT9);
+optical Optical3 = optical(PORT3);
+motor backMotor = motor(PORT4, true);
+motor pinionMotor = motor(PORT5, false);
+
+
+// generating and setting random seed
+void initializeRandomSeed(){
+  wait(100,msec);
+  double xAxis = BrainInertial.acceleration(xaxis) * 1000;
+  double yAxis = BrainInertial.acceleration(yaxis) * 1000;
+  double zAxis = BrainInertial.acceleration(zaxis) * 1000;
+  // Combine these values into a single integer
+  int seed = int(
+    xAxis + yAxis + zAxis
+  );
+  // Set the seed
+  srand(seed); 
+}
+
+// Converts a color to a string
+const char* convertColorToString(color col) {
+  if (col == colorType::red) return "red";
+  else if (col == colorType::green) return "green";
+  else if (col == colorType::blue) return "blue";
+  else if (col == colorType::white) return "white";
+  else if (col == colorType::yellow) return "yellow";
+  else if (col == colorType::orange) return "orange";
+  else if (col == colorType::purple) return "purple";
+  else if (col == colorType::cyan) return "cyan";
+  else if (col == colorType::black) return "black";
+  else if (col == colorType::transparent) return "transparent";
+  else if (col == colorType::red_violet) return "red_violet";
+  else if (col == colorType::violet) return "violet";
+  else if (col == colorType::blue_violet) return "blue_violet";
+  else if (col == colorType::blue_green) return "blue_green";
+  else if (col == colorType::yellow_green) return "yellow_green";
+  else if (col == colorType::yellow_orange) return "yellow_orange";
+  else if (col == colorType::red_orange) return "red_orange";
+  else if (col == colorType::none) return "none";
+  else return "unknown";
+}
+
+
+// Convert colorType to string
+const char* convertColorToString(colorType col) {
+  if (col == colorType::red) return "red";
+  else if (col == colorType::green) return "green";
+  else if (col == colorType::blue) return "blue";
+  else if (col == colorType::white) return "white";
+  else if (col == colorType::yellow) return "yellow";
+  else if (col == colorType::orange) return "orange";
+  else if (col == colorType::purple) return "purple";
+  else if (col == colorType::cyan) return "cyan";
+  else if (col == colorType::black) return "black";
+  else if (col == colorType::transparent) return "transparent";
+  else if (col == colorType::red_violet) return "red_violet";
+  else if (col == colorType::violet) return "violet";
+  else if (col == colorType::blue_violet) return "blue_violet";
+  else if (col == colorType::blue_green) return "blue_green";
+  else if (col == colorType::yellow_green) return "yellow_green";
+  else if (col == colorType::yellow_orange) return "yellow_orange";
+  else if (col == colorType::red_orange) return "red_orange";
+  else if (col == colorType::none) return "none";
+  else return "unknown";
+}
+
+
+void vexcodeInit() {
+
+  // Initializing random seed.
+  initializeRandomSeed(); 
+}
+
+#pragma endregion VEXcode Generated Robot Configuration
+
+//----------------------------------------------------------------------------
+//
+//    Module:       main.cpp
+//    Author:       {author}
+//    Created:      {date}
+//    Description:  IQ project - automated scantron grader
+//
+//----------------------------------------------------------------------------
+
+// Include the IQ Library
+#include "iq_cpp.h"
+
+
+const int PAGE_DIST = 1; // mm, distance to paper from sensor
+const int QUESTIONS = 10; // max questions per test
+const int MAX_STUDENTS = 10; // max students per grading run
+const double PINION_DIAMETER = 20.0; // mm, rack-and-pinion diameter - verify this
+const int TOTAL_ANSWERS = QUESTIONS * 5;
+const int MAX_DIST = 125; //mm, max distance the pinion can travel
+
+
+motor_group intakeMotors(leftMotor, rightMotor);
+motor_group allMotors(leftMotor, rightMotor, backMotor); //useful for when all motors need to turn off
+
+
+// Returns true if any drive motor is drawing more current than expected
+bool motorCurrent() {
+  if (leftMotor.current(amp) > 1 || rightMotor.current(amp) > 1 ||
+      backMotor.current(amp) > 1) {
+    return true;
+  } else {
+    return false;
+  }
+  // test cases: run the motor for a few minutes and check for auto-stop/heat
+  // jam the wheels and confirm this returns true
+}
+
+
+// Checks the distance sensor and spins the back (eject) wheel while a sheet is detected in front of it.
+void outputWheel() {
+  backMotor.spin(forward, 50, percent); 
+  while (Distance7.objectDistance(mm) < PAGE_DIST && !motorCurrent())
+  {}
+  backMotor.stop(brake);
+  // test cases: paper on sensor -> motor off, paper off sensor -> motor on
+}
+
+
+// A substitute "spin for" function that waits to see the next red block, stopped by the left button
+void walmartSpinFor(double distance)
+{
+  intakeMotors.spin(forward,10,percent);
+  while (Optical3.color() == red && !Brain.buttonLeft.pressing() && !motorCurrent());
+  {}
+  while(Optical3.color() != red && !Brain.buttonLeft.pressing() && !motorCurrent())
+  {}
+  intakeMotors.stop(brake);
+}
+
+
+// Same as the previous function except it's for the back motor,
+//this is used for the last question on the sheet since the intake motors can't reach the paper anymore
+void walmartSpinForBack(double distance)
+{
+  backMotor.spin(forward,20,percent); //speed is higher than for intake because back wheel doesn't grip paper very well
+  while (Optical3.color() == red && !Brain.buttonLeft.pressing() && !motorCurrent())
+  {}
+  while(Optical3.color() != red && !Brain.buttonLeft.pressing() && !motorCurrent())
+  {}
+  backMotor.stop(brake);
+}
+
+
+// intakes paper to red square and then moves rack and pinion; reads the rack travel distance and converts it into a lettered answer (A-D)
+char scanAnswers()
+{
+  pinionMotor.resetPosition(); //this is done so the pinion can be moved back to the exact origin after it's done scanning
+  pinionMotor.spin(forward, 15, percent);
+
+  while (Optical3.color() != green && (pinionMotor.position(degrees) / 360) * M_PI * PINION_DIAMETER < MAX_DIST && !Brain.buttonLeft.pressing() && !motorCurrent())
+  {} //wait until sensor sees green or the pinion has gone the max distance
+
+  pinionMotor.stop(brake);
+
+
+    double motorDegrees = pinionMotor.position(degrees);
+    double rackDistance = (motorDegrees / 360.0) * M_PI * PINION_DIAMETER;
+
+    char answer;
+
+    if (rackDistance < 50) // mm; hard-coded distances for each of the bubbles
+        answer = 'A';
+  
+    else if (rackDistance < 80)
+        answer = 'B';
+        
+    else if (rackDistance < 115)
+        answer = 'C';
+        
+    else
+        answer = 'D';
+        
+
+    // Return the pinion to the starting position
+    pinionMotor.spin(reverse, 10, percent);
+
+    while (pinionMotor.position(degrees) > 2 && !Brain.buttonLeft.pressing() && !motorCurrent()) //tolerance because i dont want it to overshoot to 0
+    {
+    }
+
+    pinionMotor.stop(brake);
+
+    return answer;
+}
+
+
+//this code doesn't contain the answerKey function since there are no
+//answer keys for surverys, this is also the reason it doesn't contain
+//the gradeAnswer function
+
+
+// Function that sort of puts it all together, waits for LED and bumper pressed and then starts the
+// scanning and grading code using the previous functions
+int testInput(int stats[], bool &failure) {
+  Brain.Screen.clearScreen(); //user interaction
+  Brain.Screen.setFont(mono15);
+  Brain.Screen.print("Input one test");
+  Brain.Screen.newLine();
+  Brain.Screen.print("and press LED"); 
+
+  int numberOfTests = 0;
+  int tempIndex = 0;
+
+  while (!Brain.buttonLeft.pressing() && !motorCurrent() && numberOfTests < MAX_STUDENTS) { //this loops for every test
+    backMotor.stop(brake);
+    while (!Bumper12.pressing()) //wait for tray to be placed
+    {}
+    TouchLED9.setColor(blue);
+    while (!TouchLED9.pressing())  // wait for start press
+    {}
+    while (TouchLED9.pressing())   // wait for release
+    {}
+    TouchLED9.off(); //touchLED turns off after tapped
+    printf("Processing student %d\n", numberOfTests+1);
+
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1,1);
+    Brain.Screen.print("Processing test.");
+    Brain.Screen.newLine();
+    Brain.Screen.print("Press left button");
+    Brain.Screen.newLine();
+    Brain.Screen.print("for E-stop.");
+
+
+    int index = 0;
+    while (index < QUESTIONS && !Brain.buttonLeft.pressing() && !motorCurrent()) //this loops for every row
+    {
+      if (Distance7.objectDistance(mm) > PAGE_DIST && index > QUESTIONS-1) { //if the last question is scanned, this makes sure that it get out of the loop
+        index += 20;
+      }
+      else if (index >= QUESTIONS-2) { //if its on the last question, use the back wheel to intake
+        char letter = scanAnswers(); 
+
+        //every four spots in the array represent one question
+        if (letter == 'A')
+          tempIndex = index * 4; //the first spot is the letter A
+
+        else if (letter == 'B')
+          tempIndex = (index * 4) +1; //The second the letter B
+
+        else if (letter == 'C')
+          tempIndex = (index*4)+2; //and so on
+        
+        else
+          tempIndex = (index*4) + 3; //and so on
+        
+        stats[tempIndex] +=1; //add a count to that place in the array
+
+        index++;
+      }
+      else{ //else use the intake motors to intake
+        intakeMotors.spin(forward,7,percent);
+        while (Optical3.color() != red && !Brain.buttonLeft.pressing())
+        {}
+        intakeMotors.stop(brake);
+
+        char letter = scanAnswers(); 
+
+        if (letter == 'A')
+          tempIndex = index * 4;
+
+        else if (letter == 'B')
+          tempIndex = (index * 4)+1;
+
+        else if (letter == 'C')
+          tempIndex = (index*4) + 2;
+          
+        else
+          tempIndex = (index*4) + 3;
+          
+        stats[tempIndex]++;
+
+        walmartSpinFor(10); //waits for next red block
+        index++;
+      }
+    }
+
+    if (motorCurrent()){//if motorCurrent is triggered then it will turn on the failure flag
+      failure = true;
+      Brain.Screen.clearScreen();
+      Brain.Screen.setCursor(1,1);
+      Brain.Screen.print("There's a jam, ");
+      Brain.Screen.newLine();
+      Brain.Screen.print("press the right button");
+    }
+
+    allMotors.stop(brake);
+
+    Brain.Screen.clearScreen(); //User interface once page is done
+    Brain.Screen.setCursor(1,1);
+    Brain.Screen.print("Press right button to");
+    Brain.Screen.newLine();
+    Brain.Screen.print("scan another or left");
+    Brain.Screen.newLine();
+    Brain.Screen.print("button to finish.");
+
+    numberOfTests++;
+
+    while (!Brain.buttonRight.pressing() && !Brain.buttonLeft.pressing())
+    {}//the right button is pressed to start another test
+  }
+
+  if (motorCurrent()){
+      failure = true;
+  }
+
+  allMotors.stop(brake);
+  return numberOfTests;
+
+  // test cases: left button or a jam should stop all motors and exit the loop
+  // pressing the LED starts/stops motors, right button restarts the scan loop
+}
+
+
+
+//The survey version of this function simply outputs the satistics of the survey
+void displayFinalGrade(bool &failure) {
+
+  int stats[TOTAL_ANSWERS] = {0};
+  int numTests = testInput(stats, failure);
+
+  printf("The statistics for the answer to each question over %d tests are as follows:\n", numTests);
+
+  for (int index = 0; index < QUESTIONS; index ++){
+    int aIndex = index*4, bIndex = (index*4)+1, cIndex = (index*4)+2, dIndex = (index*4)+3;
+
+    //print out all of the statistics for each question on the console
+    printf("Question %d", index +1);
+    printf("%5c%5c%5c%5c\n", 'A', 'B', 'C', 'D');
+    printf("%10d%5d%5d%5d\n", stats[aIndex], stats[bIndex], stats[cIndex], stats[dIndex]);
+  }
+
+  Brain.Screen.clearScreen();
+  Brain.Screen.setCursor(1,1);
+  Brain.Screen.print("Statistics printed on console.");
+
+}
+
+//Closes all files and shuts down all systems, we need to decide what we are putting in files and what failure is
+int shutDown(bool failure)
+{
+  Optical3.setLight(ledState::off);
+  Brain.programStop();
+  if (failure == false)
+  {
+    return EXIT_SUCCESS;
+  }
+  else
+  {
+    return EXIT_FAILURE; //only triggered by motorCurrent
+  }  
+}         
+
+
+int main()
+{
+  vexcodeInit();
+  timer timer1; //time of operation
+  bool failure = false;
+
+  Optical3.setLight(ledState::on);
+
+  displayFinalGrade(failure); //this runs the whole cycle
+
+  outputWheel(); //clear anything from tray
+  double time = timer1.time(seconds);
+     
+  if (!failure){
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1,1);
+    Brain.Screen.print("Time elapsed: %.2f", time);
+    Brain.Screen.newLine();
+    Brain.Screen.print("Press check button");
+    Brain.Screen.newLine();
+    Brain.Screen.print("to end.");
+  }
+  else{
+    Brain.Screen.clearScreen();
+    Brain.Screen.setCursor(1,1);
+    Brain.Screen.print("Sudden failure");
+    Brain.Screen.newLine();
+    Brain.Screen.print("due to");
+    Brain.Screen.newLine();
+    Brain.Screen.print("current overdrive.");
+  }
+
+  while(!Brain.buttonCheck.pressing()) //wait for check button to be pressed for machine to turn off
+  {}
+
+  shutDown(failure);
+}
